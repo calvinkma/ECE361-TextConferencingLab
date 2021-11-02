@@ -18,6 +18,12 @@
 #define PORT_NUMBER_STR_LENGTH 5
 #define MAX_COMMAND_LENGTH MAX_NAME + MAX_DATA + PORT_NUMBER_LENGTH + IPV4_BYTE_LENGTH
 
+// Testing
+// 1. Open two terminals, T1 and T2
+// 2. On T1, run `nc -l -p <port number>`, e.g. `nc -l -p 3000`. This will be server.
+// 3. On T2, run `nc <ip> <port number>` for server's ip and port number.
+// 4. Entering whatever text on either T1 or T2 will show up on the other end.
+
 uint32_t get_server_addr_from_login_command(char* login_command) {
     char server_addr_str[IPV4_STR_LENGTH];
     uint32_t server_addr_binary;

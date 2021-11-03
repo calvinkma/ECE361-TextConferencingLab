@@ -1,6 +1,7 @@
 CC=gcc
 INC_DIR = .
 CFLAGS=-I$(INC_DIR)
+LDFLAGS=-pthread
 
 all: server/server client/client
 clean:

@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <regex.h>
-#include <arpa/inet.h>
+#include <arpa/inet.h> // For type conversions, e.g. htons
 #include <inttypes.h> // To print uint32_t, uint16_t nicely
+#include <sys/socket.h>
+#include <pthread.h>
 
 // Project Files
 #include "message.h"
@@ -43,12 +45,19 @@ uint16_t get_server_port_number_from_login_command(char* login_command) {
     return htons((unsigned short)(atoi(server_port_number_str)));
 }
 
-Message* build_message_from_input(char* input_buf) {
+char* get_client_name_from_login_command(char* login_command) {
+    char* client_name = (char*) malloc(sizeof(char)*MAX_NAME);
+    sscanf(login_command, "%*s %s", client_name);
+    return client_name;
+}
+
+Message* build_message_from_input(char* input_buf, char* sender_name) {
     unsigned int type;
     unsigned int size;
     unsigned char source[MAX_NAME];
     unsigned char data[MAX_DATA];
 
+    // TODO: Complete this fcn here!
     if (is_string_of_pattern(input_buf, LOGIN_COMMAND_PATTERN)) {
         type = LOGIN;
         printf("IS LOGIN %d\n", type);
@@ -69,8 +78,32 @@ Message* build_message_from_input(char* input_buf) {
         printf("IS MESSAGE\n");
     }
 
-    // TODO: Create the message
-    return NULL;
+    return build_message(type, size, source, data);
+}
+
+void *receiver_thread_call(void* p_socket_fd) {
+    char receive_buf[MAX_DATA]; // TODO: Need a bigger length here later
+    ssize_t n_bytes_received;
+    int socket_fd = *((int*) p_socket_fd);
+    while (1) {
+        n_bytes_received = recv(socket_fd, receive_buf, MAX_DATA, 0);
+        if (n_bytes_received > 0) {
+            receive_buf[n_bytes_received] = '\0'; // TODO: HACK!
+            printf("Receiver: %s", receive_buf);
+        } else if (n_bytes_received == 0) {
+            printf("Connection is closed by the server.\n");
+            break;
+        } else {
+            printf("Failed to receive from the connection socket.\n");
+            break;
+        }
+    }
+}
+
+pthread_t init_receiving_thread(int socket_fd) {
+    pthread_t* p_receiver_thread = (pthread_t *) malloc(sizeof(pthread_t));
+    pthread_create(p_receiver_thread, NULL, receiver_thread_call, (void*)(&socket_fd));
+    return *p_receiver_thread;
 }
 
 int main(void) {
@@ -81,6 +114,11 @@ int main(void) {
 
     // State Information
     bool is_connection_setup = false;
+    int socket_fd;
+    pthread_t receiver_thread;
+
+    // Client Information
+    char* client_name;
 
     // Server Information
     short is_server_ip_valid;
@@ -96,19 +134,36 @@ int main(void) {
                 printf("You first need to log in to connect to the server.\n");
                 continue;
             } else {
+                // Parse server information
                 server_addr_binary = get_server_addr_from_login_command(input_buf);
                 server_port_number = get_server_port_number_from_login_command(input_buf);
-                // printf("%" PRIu32 "\n", server_addr_binary);
-                // printf("%" PRIu16 "\n", server_port_number);
-                // TODO: establish TCP connection
-                //   If successful, set is_connection_setup to true, create new listening thread
-                is_connection_setup = true;
-                //   If not, just continue in the loop
+                server_addr.sin_family = AF_INET;
+                server_addr.sin_port = server_port_number;
+                server_addr.sin_addr.s_addr = server_addr_binary;
+
+                // Parse client information
+                client_name = get_client_name_from_login_command(input_buf);
+
+                // Establish TCP connection
+                socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+                int connect_rval = connect(socket_fd, (struct sockaddr*) &server_addr, sizeof(server_addr));
+
+                if (connect_rval == 0) {
+                    printf("Connected to the server.\n");
+                    is_connection_setup = true;
+                    // Create new thread to receive and print messages from server
+                    receiver_thread = init_receiving_thread(socket_fd);
+                } else {
+                    printf("Failed to connect to the server. Verify your input and retry login.\n");
+                    continue;
+                }
             }
         }
 
-        p_message = build_message_from_input(input_buf);
-        // Send message to server over the TCP connection
+        if (is_connection_setup) {
+            p_message = build_message_from_input(input_buf, client_name);
+            // TODO: Send message
+        }
     }
 }
 

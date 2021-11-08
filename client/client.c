@@ -7,6 +7,8 @@
 #include <inttypes.h> // To print uint32_t, uint16_t nicely
 #include <sys/socket.h>
 #include <pthread.h>
+#include <errno.h>
+#include <unistd.h>
 
 // Project Files
 #include "message.h"
@@ -51,34 +53,53 @@ char* get_client_name_from_login_command(char* login_command) {
     return client_name;
 }
 
+char* get_password_from_login_command(char* login_command) {
+    char* password = (char*) malloc(sizeof(char)*MAX_DATA);
+    sscanf(login_command, "%*s %*s %s", password);
+    return password;
+}
+
+char* get_session_name_from_second_arg(char* session_command) {
+    char* session_name = (char*) malloc(sizeof(char)*MAX_DATA);
+    sscanf(session_command, "%*s %s", session_name);
+    return session_name;
+}
+
 Message* build_message_from_input(char* input_buf, char* sender_name) {
     unsigned int type;
-    unsigned int size;
-    unsigned char source[MAX_NAME];
-    unsigned char data[MAX_DATA];
+    unsigned int size = 0;
+    unsigned char* p_source = sender_name;
+    unsigned char empty_string[1] = "";
+    unsigned char* p_data = empty_string;
 
-    // TODO: Complete this fcn here!
     if (is_string_of_pattern(input_buf, LOGIN_COMMAND_PATTERN)) {
         type = LOGIN;
-        printf("IS LOGIN %d\n", type);
+        p_data = get_password_from_login_command(input_buf);
+        size = strlen(p_data);
     } else if (is_string_of_pattern(input_buf, LOGOUT_COMMAND_PATTERN)) {
-        printf("IS LOGOUT\n");
+        type = EXIT;
     } else if (is_string_of_pattern(input_buf, JOIN_SESS_COMMAND_PATTERN)) {
         printf("IS JOIN SESS\n");
     } else if (is_string_of_pattern(input_buf, LEAVE_SESS_COMMAND_PATTERN)) {
-        printf("IS LEAVE SESS\n");
+        type = LEAVE_SESS;
+        p_data = get_session_name_from_second_arg(input_buf);
+        size = strlen(p_data);
     } else if (is_string_of_pattern(input_buf, CREATE_SESS_COMMAND_PATTERN)) {
-        printf("IS CREATE SESS\n");
+        type = NEW_SESS;
+        p_data = get_session_name_from_second_arg(input_buf);
+        size = strlen(p_data);
     } else if (is_string_of_pattern(input_buf, LIST_COMMAND_PATTERN)) {
-        printf("IS LIST\n");
+        type = QUERY;
     } else if (is_string_of_pattern(input_buf, QUIT_COMMAND_PATTERN)) {
-        printf("IS QUIT\n");
-        exit(0);
+        type = EXIT;
     } else {
+        type = MESSAGE;
+        p_data = input_buf;
+        size = strlen(p_data);
         printf("IS MESSAGE\n");
     }
 
-    return build_message(type, size, source, data);
+    return build_message(type, size, p_source, p_data);
 }
 
 void *receiver_thread_call(void* p_socket_fd) {
@@ -94,7 +115,7 @@ void *receiver_thread_call(void* p_socket_fd) {
             printf("Connection is closed by the server.\n");
             break;
         } else {
-            printf("Failed to receive from the connection socket.\n");
+            printf("Failed to receive from the connection socket: %s\n", strerror(errno));
             break;
         }
     }
@@ -102,7 +123,9 @@ void *receiver_thread_call(void* p_socket_fd) {
 
 pthread_t init_receiving_thread(int socket_fd) {
     pthread_t* p_receiver_thread = (pthread_t *) malloc(sizeof(pthread_t));
-    pthread_create(p_receiver_thread, NULL, receiver_thread_call, (void*)(&socket_fd));
+    int *arg = malloc(sizeof(*arg));
+    *arg = socket_fd;
+    pthread_create(p_receiver_thread, NULL, receiver_thread_call, arg);
     return *p_receiver_thread;
 }
 
@@ -146,6 +169,12 @@ int main(void) {
 
                 // Establish TCP connection
                 socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+                if (socket_fd == -1) {
+                    printf("Failed to create a socket: %s. Try again.\n", strerror(errno));
+                    continue;
+                }
+
                 int connect_rval = connect(socket_fd, (struct sockaddr*) &server_addr, sizeof(server_addr));
 
                 if (connect_rval == 0) {
@@ -161,8 +190,28 @@ int main(void) {
         }
 
         if (is_connection_setup) {
+            // Send message
             p_message = build_message_from_input(input_buf, client_name);
-            // TODO: Send message
+            char* message_string = serialize_message(*p_message);
+            send_message_string(message_string, socket_fd);
+
+            // Cancel the connection, if user logs out
+            if (is_string_of_pattern(input_buf, LOGOUT_COMMAND_PATTERN)) {
+                is_connection_setup = false;
+                int thread_cancel_status = pthread_cancel(receiver_thread);
+                if (thread_cancel_status == 0) {
+                    printf("Receiver thread terminated.\n");
+                } else {
+                    printf("Warning: Receiver thread cannot be closed!\n");
+                }
+                close(socket_fd);
+            } 
+        }
+
+        // Quit command exits the program, after sending a logout to server
+        if (is_string_of_pattern(input_buf, QUIT_COMMAND_PATTERN)) {
+            close(socket_fd);
+            exit(0);
         }
     }
 }

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 // Project Files
 #include "constants.h"
@@ -38,6 +39,29 @@ Message* build_message(unsigned int type, unsigned int size, unsigned char* sour
     return p_message;
 }
 
+char* serialize_message(Message message) {
+    char* message_string = (char*) malloc(sizeof(char)*MAX_MESSAGE_LENGTH);
+    sprintf(message_string, "%d:%d:%s:", message.type, message.size, message.source);
+    memcpy(message_string + strlen(message_string), message.data, message.size);
+    printf("%s\n", message_string); // TODO: Does not handle case if data contains zero byte
+    return message_string;
+}
+
 void print_message(Message message) {
-    printf("Message: type = %d, size = %d\n");
+    printf("Message: type = %d, size = %d, src = %s, data = %s\n", message.type, message.size, message.source, message.data);
+}
+
+void send_message_string(char* message_string, int socket_fd) {
+    // First send four bytes that represent length of the message
+    unsigned char bytes[4];
+    unsigned int message_strlen = strlen(message_string);
+    bytes[0] = (message_strlen >> 24) & 0xFF;
+    bytes[1] = (message_strlen >> 16) & 0xFF;
+    bytes[2] = (message_strlen >> 8) & 0xFF;
+    bytes[3] = message_strlen & 0xFF;
+    printf("%x %x %x %x\n", bytes[0], bytes[1], bytes[2], bytes[3]);
+    send(socket_fd, bytes, 4, 0);
+
+    // Then send the message
+    send(socket_fd, message_string, message_strlen, 0);
 }

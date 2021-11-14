@@ -168,7 +168,19 @@ struct Session* get_session(char *session_id) {
 }
 
 
+void process_leave(struct Client *client);
+
 void process_exit(struct Client *client) {
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        if (client->joined_sessions[i] != NULL) {
+            process_leave(client);
+        }
+    }
+
+    client->connected = false;
+    FD_CLR(client->client_FD, &read_fds);
+    close(client->client_FD);
+    client->client_FD = -1;
 }
 
 
@@ -286,14 +298,11 @@ void process_new_session(struct Client *client, struct Message message) {
 void process_message(struct Client *client, struct Message message) {
     // TODO: Since we're saying a client can only be part of one session for now, find the session with the lowest index
     struct Session *session_to_broadcast = NULL;
-    printf("blah0\n");
     for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
         if (client->joined_sessions[i] != NULL) {
             session_to_broadcast = client->joined_sessions[i];
         }
     }
-
-    printf("blah1\n");
 
     if (session_to_broadcast == NULL) {
         struct Message response = { .type = MESSAGE, .source = "Server", .data = "Session not found" };
@@ -302,7 +311,6 @@ void process_message(struct Client *client, struct Message message) {
         send_message_string(message_string, client->client_FD);
         return;
     }
-    printf("blah2\n");
     if (client->joined_sessions[session_to_broadcast->session_index] == NULL) {
         struct Message response = { .type = MESSAGE, .source = "Server", .data = "You are not a member of that session" };
         response.size = strlen(response.data);

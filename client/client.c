@@ -79,7 +79,9 @@ Message* build_message_from_input(char* input_buf, char* sender_name) {
     } else if (is_string_of_pattern(input_buf, LOGOUT_COMMAND_PATTERN)) {
         type = EXIT;
     } else if (is_string_of_pattern(input_buf, JOIN_SESS_COMMAND_PATTERN)) {
-        printf("IS JOIN SESS\n");
+        type = JOIN;
+        p_data = get_session_name_from_second_arg(input_buf);
+        size = strlen(p_data);
     } else if (is_string_of_pattern(input_buf, LEAVE_SESS_COMMAND_PATTERN)) {
         type = LEAVE_SESS;
         p_data = get_session_name_from_second_arg(input_buf);

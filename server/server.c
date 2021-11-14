@@ -25,12 +25,9 @@ struct Client {
     char client_ID[150];
     char password[150];
     bool connected;
-    int client_fd;
+    int client_FD;
     struct Session *joined_sessions[MAX_NUM_SESSIONS];
 };
-
-// struct client calvin = { .client_ID = "calvin", .password = "stanford" };
-// struct client jerry = { .client_ID = "jerry", .password = "microsoft" };
 
 struct Client client_list[MAX_NUM_CLIENTS] = {
     { .client_ID = "calvin", .password = "stanford", .connected = false },
@@ -86,11 +83,6 @@ void start_listening(int socket) {
 }
 
 struct Message decode_char_array(char* buffer, int message_strlen) {
-    // for (int i = 0; i < message_strlen; i++) {
-    //     printf("%c", buffer[i]);
-    // }
-    // printf("\n");
-
     struct Message message;
     int delimiter_indexes[3] = {0, 0, 0};
     int current_delimiter_count = 0;
@@ -109,15 +101,11 @@ struct Message decode_char_array(char* buffer, int message_strlen) {
     message.size = atoi(buffer + sizeof(char) * delimiter_indexes[0] + sizeof(char));
 
     int num_source_chars = delimiter_indexes[2] - delimiter_indexes[1] - 1;
-    // message.source = (char *) malloc(sizeof(char) * (num_source_chars + 1));
     (message.source)[num_source_chars] = '\0';
     memcpy(message.source, buffer + sizeof(char) * delimiter_indexes[1] + sizeof(char), num_source_chars);
     (message.data)[message_strlen - delimiter_indexes[2] - 1] = '\0';
     memcpy(message.data, buffer + sizeof(char) * delimiter_indexes[2] + sizeof(char), message_strlen - delimiter_indexes[2] - 1);
 
-    // printf("%s\n", message.source);
-    // printf("%s\n", message.data);
-    // printf("\n");
     return message;
 }
 
@@ -147,7 +135,7 @@ bool user_login(int new_client) {
                     char* message_string = serialize_message(response);
                     send_message_string(message_string, new_client);
 
-                    client_list[i].client_fd = new_client;
+                    client_list[i].client_FD = new_client;
                     client_list[i].connected = true;
                     printf("Client %s connected to server\n", message.source);
                     return true;
@@ -170,18 +158,97 @@ bool user_login(int new_client) {
 }
 
 
-void process_exit(struct Client *client) {
-
+struct Session* get_session(char *session_id) {
+  for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+    if (sessions[i] != NULL && (strcmp(sessions[i]->session_ID, session_id) == 0)) {
+      return sessions[i];
+    }
+  }
+  return NULL;
 }
 
 
-void process_join(struct Client *client) {
+void process_exit(struct Client *client) {
+}
 
+
+void process_join(struct Client *client, struct Message message) {
+    char response_data[MAX_DATA];
+    struct Session *session_to_join = get_session(message.data);
+    if (session_to_join == NULL) {
+        struct Message response = { .type = JN_NAK, .source = "Server" };
+        sprintf(response_data, "Could not find session %s", session_to_join->session_ID);
+        strcpy(response.data, response_data);
+        response.size = strlen(response.data);
+        char* message_string = serialize_message(response);
+        send_message_string(message_string, client->client_FD);
+        return;
+    }
+
+    // Add user to session members
+    for (int i = 0; i < MAX_SESSION_CLIENTS; i++) {
+        if (session_to_join->session_clients[i] == NULL) {
+            session_to_join->session_clients[i] = client;
+            session_to_join->num_users++;
+            break;
+        }
+    }
+
+    // Add session to user members
+    if (client->joined_sessions[session_to_join->session_index] == NULL) {
+        client->joined_sessions[session_to_join->session_index] = session_to_join;
+    } else {
+        printf("Error: User %s has already joined session %s\n", client->client_ID, session_to_join->session_ID);
+    }
+
+    // Send response
+    struct Message response = { .type = JN_ACK, .source = "Server" };
+    sprintf(response_data, "%s", session_to_join->session_ID);
+    strcpy(response.data, response_data);
+    response.size = strlen(response.data);
+    char* message_string = serialize_message(response);
+    send_message_string(message_string, client->client_FD);
 }
 
 
 void process_leave(struct Client *client) {
+    // TODO: Since we're saying a client can only be part of one session for now, find the session with the lowest index
+    struct Session *session_to_leave;
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        if (client->joined_sessions[i] != NULL) {
+            session_to_leave = client->joined_sessions[i];
+        }
+    }
 
+    if (session_to_leave == NULL) {
+        struct Message response = { .type = MESSAGE, .source = "Server", .data = "Session not found" };
+        response.size = strlen(response.data);
+        char* message_string = serialize_message(response);
+        send_message_string(message_string, client->client_FD);
+        return;
+    }
+    if (client->joined_sessions[session_to_leave->session_index] == NULL) {
+        struct Message response = { .type = MESSAGE, .source = "Server", .data = "You are not a member of that session" };
+        response.size = strlen(response.data);
+        char* message_string = serialize_message(response);
+        send_message_string(message_string, client->client_FD);
+        return;
+    }
+
+    // Remove client from session
+    for (int i = 0; i < MAX_SESSION_CLIENTS; i++) {
+        if (session_to_leave->session_clients[i] == client) {
+            session_to_leave->session_clients[i] = NULL;
+            session_to_leave->num_users--;
+            if (session_to_leave->num_users == 0) {
+                sessions[session_to_leave->session_index] = NULL;
+                free(session_to_leave);
+            }
+        }
+    }
+
+    // Remove session from client
+    client->joined_sessions[session_to_leave->session_index] = NULL;
 }
 
 
@@ -204,12 +271,11 @@ void process_new_session(struct Client *client, struct Message message) {
             }
             
             sessions[i]->num_users = 1;
-            // printf("Session index and ID: %d %s\n", sessions[i]->session_index, sessions[i]->session_ID);
 
             struct Message response = { .type = NS_ACK, .source = "Server", .data = "" };
             response.size = strlen(response.data);
             char* message_string = serialize_message(response);
-            send_message_string(message_string, client->client_fd);
+            send_message_string(message_string, client->client_FD);
             return;
         }
     }
@@ -217,8 +283,44 @@ void process_new_session(struct Client *client, struct Message message) {
 }
 
 
-void process_message(struct Client *client) {
+void process_message(struct Client *client, struct Message message) {
+    // TODO: Since we're saying a client can only be part of one session for now, find the session with the lowest index
+    struct Session *session_to_broadcast = NULL;
+    printf("blah0\n");
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        if (client->joined_sessions[i] != NULL) {
+            session_to_broadcast = client->joined_sessions[i];
+        }
+    }
 
+    printf("blah1\n");
+
+    if (session_to_broadcast == NULL) {
+        struct Message response = { .type = MESSAGE, .source = "Server", .data = "Session not found" };
+        response.size = strlen(response.data);
+        char* message_string = serialize_message(response);
+        send_message_string(message_string, client->client_FD);
+        return;
+    }
+    printf("blah2\n");
+    if (client->joined_sessions[session_to_broadcast->session_index] == NULL) {
+        struct Message response = { .type = MESSAGE, .source = "Server", .data = "You are not a member of that session" };
+        response.size = strlen(response.data);
+        char* message_string = serialize_message(response);
+        send_message_string(message_string, client->client_FD);
+        return;
+    }
+
+    // Send message to all clients in the session, including sender
+    for (int i = 0; i < MAX_SESSION_CLIENTS; ++i) {
+        if (session_to_broadcast->session_clients[i] != NULL) {
+            struct Message response = { .type = MESSAGE, .source = "Server" };
+            strcpy(response.data, message.data);
+            response.size = strlen(response.data);
+            char* message_string = serialize_message(response);
+            send_message_string(message_string, session_to_broadcast->session_clients[i]->client_FD);
+        }
+    }
 }
 
 
@@ -226,12 +328,11 @@ void process_query(struct Client *client) {
     struct Message response = { .type = QU_ACK, .source = "Server" };
     char data[MAX_DATA];
 
-    // Prints everything for now
     strcpy(data, "Active sessions: ");
     for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
-        // printf("%s", sessions[i]->session_ID);
         if (sessions[i] != NULL) {
             strcat(data, sessions[i]->session_ID);
+            strcat(data, ", ");
         }
     }
     strcat(data, "\n");
@@ -242,12 +343,12 @@ void process_query(struct Client *client) {
             strcat(data, client_list[i].client_ID);
             strcat(data, " connected to sessions: ");
             for (int j = 0; j < MAX_NUM_SESSIONS; j++) {
-                // printf(data, "%s", client_list[i].joined_sessions[j]->session_ID);
                 if (client_list[i].joined_sessions[j] != NULL) {
                     strcat(data, client_list[i].joined_sessions[j]->session_ID);
-                    strcat(data, "\n");
+                    strcat(data, ", ");
                 }
             }
+            strcat(data, "\n");
         }
     }
     strcat(data, "\n");
@@ -256,7 +357,7 @@ void process_query(struct Client *client) {
     response.size = strlen(response.data);
     char* message_string = serialize_message(response);
     printf("%s", message_string);
-    send_message_string(message_string, client->client_fd);
+    send_message_string(message_string, client->client_FD);
 }
 
 
@@ -265,10 +366,10 @@ void process_client(struct Client *client) {
         return;
     }
 
-    if (FD_ISSET(client->client_fd, &read_fds)) {
+    if (FD_ISSET(client->client_FD, &read_fds)) {
         char buffer[MAX_MESSAGE_LENGTH];
         unsigned int message_strlen;
-        int status = recv(client->client_fd, buffer, 4, 0);
+        int status = recv(client->client_FD, buffer, 4, 0);
         if (status == -1) {
             printf("Error: Couldn't read message from client %s.\n", client->client_ID);
             return;
@@ -276,7 +377,7 @@ void process_client(struct Client *client) {
 
         message_strlen = ((buffer[0] << 24) & 0xFF000000) | ((buffer[1] << 16) & 0xFF0000) | ((buffer[2] << 8) & 0xFF00) | (buffer[3]& 0xFF);
 
-        status = recv(client->client_fd, buffer, message_strlen, 0);
+        status = recv(client->client_FD, buffer, message_strlen, 0);
         if (status == -1) {
             printf("Error: Couldn't read message from client %s.\n", client->client_ID);
             return;
@@ -290,7 +391,7 @@ void process_client(struct Client *client) {
                 break;
             case JOIN:
                 printf("Case JOIN\n");
-                process_join(client);
+                process_join(client, message);
                 break;
             case LEAVE_SESS:
                 printf("Case LEAVE_SESS\n");
@@ -302,7 +403,7 @@ void process_client(struct Client *client) {
                 break;
             case MESSAGE:
                 printf("Case MESSAGE\n");
-                process_message(client);
+                process_message(client, message);
                 break;
             case QUERY:
                 printf("Case QUERY\n");
@@ -314,7 +415,7 @@ void process_client(struct Client *client) {
 
 
 int main(int argc, char *argv[]) {
-        // Check input
+    // Check input
     if (!is_input_valid(argc, argv)) {
         printf("Error: Invalid input is provided.\n");
         exit(EXIT_FAILURE);
@@ -349,10 +450,10 @@ int main(int argc, char *argv[]) {
         FD_SET(socket, &read_fds);
         for (int i = 0; i < MAX_NUM_CLIENTS; i++) {
             if (client_list[i].connected) {
-                if (client_list[i].client_fd > highest_fd) {
-                    highest_fd = client_list[i].client_fd;
+                if (client_list[i].client_FD > highest_fd) {
+                    highest_fd = client_list[i].client_FD;
                 }
-                FD_SET(client_list[i].client_fd, &read_fds);
+                FD_SET(client_list[i].client_FD, &read_fds);
             }
         }
         select(highest_fd + 1, &read_fds, NULL, NULL, NULL);

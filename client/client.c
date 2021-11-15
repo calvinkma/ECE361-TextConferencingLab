@@ -98,7 +98,6 @@ Message* build_message_from_input(char* input_buf, char* sender_name) {
         type = MESSAGE;
         p_data = input_buf;
         size = strlen(p_data);
-        printf("IS MESSAGE\n");
     }
 
     return build_message(type, size, p_source, p_data);
@@ -112,7 +111,7 @@ void *receiver_thread_call(void* p_socket_fd) {
         n_bytes_received = recv(socket_fd, receive_buf, MAX_DATA, 0);
         if (n_bytes_received > 0) {
             receive_buf[n_bytes_received] = '\0'; // TODO: HACK!
-            printf("Receiver: %s\n", receive_buf);
+            printf("Receiver: %s\n", receive_buf + 4); // TODO: Hack to bypass the four length bytes
         } else if (n_bytes_received == 0) {
             printf("Connection is closed by the server.\n");
             break;
@@ -132,7 +131,7 @@ pthread_t init_receiving_thread(int socket_fd) {
 }
 
 int main(void) {
-    printf("Hello world client %d\n", MAX_COMMAND_LENGTH);
+    // printf("Hello world client %d\n", MAX_COMMAND_LENGTH);
 
     char input_buf[MAX_COMMAND_LENGTH];
     Message* p_message;
@@ -194,7 +193,7 @@ int main(void) {
         if (is_connection_setup) {
             // Send message
             p_message = build_message_from_input(input_buf, client_name);
-            print_message(*p_message);
+            // print_message(*p_message);
             char* message_string = serialize_message(*p_message);
             send_message_string(message_string, socket_fd);
 

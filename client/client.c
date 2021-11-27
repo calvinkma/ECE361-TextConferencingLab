@@ -100,10 +100,13 @@ Message* build_message_from_input(char* input_buf, char* sender_name) {
         type = DM;
         p_data = input_buf + DM_MESSAGE_HEADER_LENGTH * sizeof(char);
         size = strlen(p_data);
-    } else {
+    } else if (is_string_of_pattern(input_buf, MESSAGE_COMMAND_PATTERN)) {
         type = MESSAGE;
-        p_data = input_buf;
+        p_data = input_buf + SESS_MESSAGE_HEADER_LENGTH * sizeof(char);
         size = strlen(p_data);
+    } else {
+        printf("Invalid command format.\n");
+        return NULL;
     }
 
     return build_message(type, size, p_source, p_data);
@@ -200,6 +203,11 @@ int main(void) {
             // Send message
             p_message = build_message_from_input(input_buf, client_name);
             // print_message(*p_message);
+            
+            if (!p_message) {
+                continue;
+            }
+
             char* message_string = serialize_message(*p_message);
             send_message_string(message_string, socket_fd);
 

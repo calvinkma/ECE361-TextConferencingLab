@@ -27,7 +27,8 @@ typedef enum MessageType {
     NS_ACK = 10,
     MESSAGE = 11,
     QUERY = 12,
-    QU_ACK = 13
+    QU_ACK = 13,
+    LEAVE_SESS_NAME = 14
 } MessageType;
 
 Message* build_message(unsigned int type, unsigned int size, unsigned char* source, unsigned char* data) {

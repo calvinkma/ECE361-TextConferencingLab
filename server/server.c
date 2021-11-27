@@ -369,6 +369,43 @@ void process_query(struct Client *client) {
 }
 
 
+void process_DM(struct Client *client, struct Message message) {
+    // Get receiver and data
+    char *recipient = strtok(message.data, ":");
+    char *data = strtok(NULL, ":");
+
+    printf("DM recipient: %s\n", recipient);
+    printf("DM content: %s\n", data);
+
+    for (int i = 0; i < MAX_NUM_CLIENTS; i++) {
+        if (strcmp(client_list[i].client_ID, recipient) == 0) {
+            if (client_list[i].connected){
+                struct Message response = { .type = MESSAGE, .source = "Server" };
+                strcpy(response.data, "DM from ");
+                strcat(response.data, client->client_ID);
+                strcat(response.data, ":");
+                strcat(response.data, data);
+                response.size = strlen(response.data);
+                char* message_string = serialize_message(response);
+                send_message_string(message_string, client_list[i].client_FD);
+                return;
+            } else {
+                struct Message response = { .type = MESSAGE, .source = "Server", .data = "DM recipient not connected" };
+                response.size = strlen(response.data);
+                char* message_string = serialize_message(response);
+                send_message_string(message_string, client->client_FD);
+                return;
+            }
+        }
+    }
+
+    struct Message response = { .type = MESSAGE, .source = "Server", .data = "DM recipient not found" };
+    response.size = strlen(response.data);
+    char* message_string = serialize_message(response);
+    send_message_string(message_string, client->client_FD);
+}
+
+
 void process_client(struct Client *client) {
     if (!client->connected) {
         return;
@@ -416,6 +453,10 @@ void process_client(struct Client *client) {
             case QUERY:
                 printf("Case QUERY\n");
                 process_query(client);
+                break;
+            case DM:
+                printf("Case DM\n");
+                process_DM(client, message);
                 break;
         }
     }

@@ -168,12 +168,34 @@ struct Session* get_session(char *session_id) {
 }
 
 
-void process_leave(struct Client *client);
+void process_leave_all(struct Client *client) {
+    // Remove client from sessions
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        if (sessions[i] != NULL) {
+            for (int j = 0; j < MAX_SESSION_CLIENTS; j++) {
+                if (sessions[i]->session_clients[j] == client) {
+                    sessions[i]->session_clients[j] = NULL;
+                    sessions[i]->num_users--;
+                }
+            }
+            if (sessions[i]->num_users == 0) {
+                sessions[i] = NULL;
+                free(sessions[i]);
+            }
+        }
+    }
+
+    // Remove sessions from client
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        client->joined_sessions[i] = NULL;
+    }
+}
+
 
 void process_exit(struct Client *client) {
     for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
         if (client->joined_sessions[i] != NULL) {
-            process_leave(client);
+            process_leave_all(client);
         }
     }
 
@@ -223,12 +245,17 @@ void process_join(struct Client *client, struct Message message) {
 }
 
 
-void process_leave(struct Client *client) {
-    // TODO: Since we're saying a client can only be part of one session for now, find the session with the lowest index
-    struct Session *session_to_leave;
+void process_leave(struct Client *client, struct Message message) {
+    struct Session *session_to_leave = NULL;
+    char session_to_leave_ID[1024];
+    strcpy(session_to_leave_ID, message.data);
+
+    printf("Session to leave: %s\n", session_to_leave_ID);
+
     for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
-        if (client->joined_sessions[i] != NULL) {
-            session_to_leave = client->joined_sessions[i];
+        if (strcmp(sessions[i]->session_ID, session_to_leave_ID) == 0) {
+            session_to_leave = sessions[i];
+            break;
         }
     }
 
@@ -296,11 +323,18 @@ void process_new_session(struct Client *client, struct Message message) {
 
 
 void process_message(struct Client *client, struct Message message) {
-    // TODO: Since we're saying a client can only be part of one session for now, find the session with the lowest index
+    // Get session and data
     struct Session *session_to_broadcast = NULL;
+    char *session_to_broadcast_ID = strtok(message.data, ":");
+    char *data = strtok(NULL, ":");
+
+    printf("Session to broadcast: %s\n", session_to_broadcast_ID);
+    printf("Message content: %s\n", data);
+
     for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
-        if (client->joined_sessions[i] != NULL) {
-            session_to_broadcast = client->joined_sessions[i];
+        if (strcmp(sessions[i]->session_ID, session_to_broadcast_ID) == 0) {
+            session_to_broadcast = sessions[i];
+            break;
         }
     }
 
@@ -323,7 +357,10 @@ void process_message(struct Client *client, struct Message message) {
     for (int i = 0; i < MAX_SESSION_CLIENTS; ++i) {
         if (session_to_broadcast->session_clients[i] != NULL) {
             struct Message response = { .type = MESSAGE, .source = "Server" };
-            strcpy(response.data, message.data);
+            strcpy(response.data, "Message from session ");
+            strcat(response.data, session_to_broadcast_ID);
+            strcat(response.data, ":");
+            strcat(response.data, data);
             response.size = strlen(response.data);
             char* message_string = serialize_message(response);
             send_message_string(message_string, session_to_broadcast->session_clients[i]->client_FD);
@@ -440,7 +477,7 @@ void process_client(struct Client *client) {
                 break;
             case LEAVE_SESS:
                 printf("Case LEAVE_SESS\n");
-                process_leave(client);
+                process_leave(client, message);
                 break;
             case NEW_SESS:
                 printf("Case NEW_SESS\n");
@@ -457,6 +494,10 @@ void process_client(struct Client *client) {
             case DM:
                 printf("Case DM\n");
                 process_DM(client, message);
+                break;
+            case LEAVE_ALL:
+                printf("Case LEAVE_ALL\n");
+                process_leave_all(client);
                 break;
         }
     }

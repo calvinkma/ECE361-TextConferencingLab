@@ -96,6 +96,10 @@ Message* build_message_from_input(char* input_buf, char* sender_name) {
         type = QUERY;
     } else if (is_string_of_pattern(input_buf, QUIT_COMMAND_PATTERN)) {
         type = EXIT;
+    } else if (is_string_of_pattern(input_buf, DM_COMMAND_PATTERN)) {
+        type = DM;
+        p_data = input_buf + DM_MESSAGE_HEADER_LENGTH * sizeof(char);
+        size = strlen(p_data);
     } else {
         type = MESSAGE;
         p_data = input_buf;

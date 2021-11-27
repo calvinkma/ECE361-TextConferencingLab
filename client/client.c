@@ -111,7 +111,7 @@ void *receiver_thread_call(void* p_socket_fd) {
         n_bytes_received = recv(socket_fd, receive_buf, MAX_DATA, 0);
         if (n_bytes_received > 0) {
             receive_buf[n_bytes_received] = '\0'; // TODO: HACK!
-            printf("Receiver: %s\n", receive_buf + 4); // TODO: Hack to bypass the four length bytes
+            printf("Receiver: %s\n", receive_buf); // TODO: Hack to bypass the four length bytes
         } else if (n_bytes_received == 0) {
             printf("Connection is closed by the server.\n");
             break;

@@ -82,10 +82,10 @@ Message* build_message_from_input(char* input_buf, char* sender_name) {
         type = JOIN;
         p_data = get_session_name_from_second_arg(input_buf);
         size = strlen(p_data);
+    } else if (is_string_of_pattern(input_buf, LEAVE_ALL_COMMAND_PATTERN)) {
+        type = LEAVE_ALL;
     } else if (is_string_of_pattern(input_buf, LEAVE_SESS_COMMAND_PATTERN)) {
         type = LEAVE_SESS;
-    } else if (is_string_of_pattern(input_buf, LEAVE_SESS_NAME_COMMAND_PATTERN)) {
-        type = LEAVE_SESS_NAME;
         p_data = get_session_name_from_second_arg(input_buf);
         size = strlen(p_data);
     } else if (is_string_of_pattern(input_buf, CREATE_SESS_COMMAND_PATTERN)) {

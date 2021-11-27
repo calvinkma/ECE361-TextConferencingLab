@@ -1,8 +1,8 @@
 static char LOGIN_COMMAND_PATTERN[] = "^/login[[:space:]][[:alnum:]|_]+[[:space:]][[:alnum:]|_|[:punct:]]+[[:space:]]+[[:digit:]|.]+[[:space:]]+[[:digit:]]+[[:space:]]*$";
 static char LOGOUT_COMMAND_PATTERN[] = "^/logout[[:space:]]*$";
 static char JOIN_SESS_COMMAND_PATTERN[] = "^/joinsession[[:space:]][[:alnum:]|_]+[[:space:]]*$";
-static char LEAVE_SESS_COMMAND_PATTERN[] = "^/leavesession[[:space:]]*$";
-static char LEAVE_SESS_NAME_COMMAND_PATTERN[] = "^/leavesession[[:space:]][[:alnum:]|_]+[[:space:]]*$";
+static char LEAVE_ALL_COMMAND_PATTERN[] = "^/leaveall[[:space:]]*$";
+static char LEAVE_SESS_COMMAND_PATTERN[] = "^/leavesession[[:space:]][[:alnum:]|_]+[[:space:]]*$";
 static char CREATE_SESS_COMMAND_PATTERN[] = "^/createsession[[:space:]][[:alnum:]|_]+[[:space:]]*$";
 static char LIST_COMMAND_PATTERN[] = "^/list[[:space:]]*$";
 static char QUIT_COMMAND_PATTERN[] = "^/quit[[:space:]]*$";

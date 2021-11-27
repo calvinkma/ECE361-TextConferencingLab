@@ -28,7 +28,7 @@ typedef enum MessageType {
     MESSAGE = 11,
     QUERY = 12,
     QU_ACK = 13,
-    LEAVE_SESS_NAME = 14,
+    LEAVE_ALL = 14,
     DM = 15
 } MessageType;
 

@@ -159,12 +159,12 @@ bool user_login(int new_client) {
 
 
 struct Session* get_session(char *session_id) {
-  for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
-    if (sessions[i] != NULL && (strcmp(sessions[i]->session_ID, session_id) == 0)) {
-      return sessions[i];
+    for (int i = 0; i < MAX_NUM_SESSIONS; i++) {
+        if (sessions[i] != NULL && (strcmp(sessions[i]->session_ID, session_id) == 0)) {
+            return sessions[i];
+        }
     }
-  }
-  return NULL;
+    return NULL;
 }
 
 
@@ -211,7 +211,7 @@ void process_join(struct Client *client, struct Message message) {
     struct Session *session_to_join = get_session(message.data);
     if (session_to_join == NULL) {
         struct Message response = { .type = JN_NAK, .source = "Server" };
-        sprintf(response_data, "Could not find session %s", session_to_join->session_ID);
+        sprintf(response_data, "Could not find session %s", message.data);
         strcpy(response.data, response_data);
         response.size = strlen(response.data);
         char* message_string = serialize_message(response);
